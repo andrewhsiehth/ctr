@@ -29,7 +29,11 @@ class Criteo(Dataset):
         with open(self.data_path, mode='rb') as infile: 
             infile.seek(self.sample_offsets[idx]) 
             line = infile.readline() 
-        return self.make_sample(line) 
+        return self._make_sample(line) 
+
+    @property 
+    def field_dims(self): 
+        return [(f + 1) for f in self.feature_default]  
         
     def _build_feature_mapping(self): 
         self.feature_mapping = [
@@ -41,7 +45,7 @@ class Criteo(Dataset):
         ] 
         self.feature_default = [len(m) for m in self.feature_mapping] 
 
-    def make_sample(self, line: str): 
+    def _make_sample(self, line: str): 
         label, *values = line.rstrip(b'\n').split(b'\t') 
         for field_id in Criteo.FIELDS_I: 
             values[field_id] = self.feature_mapping[field_id].get(Criteo._quantize_I_feature(values[field_id]), self.feature_default[field_id]) 

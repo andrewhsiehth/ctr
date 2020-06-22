@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler 
 from torch.nn.parallel import DistributedDataParallel 
 
-from tqdm import tqdm 
+from tqdm.auto import tqdm 
 
 from argparse import ArgumentParser 
 

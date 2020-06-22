@@ -1,7 +1,7 @@
 import torch 
 from torch.utils.data import Dataset 
 
-from tqdm import tqdm 
+from tqdm.auto import tqdm 
 
 from collections import Counter 
 import functools
@@ -64,24 +64,25 @@ class Criteo(Dataset):
         offsets.pop(-1) 
         return [0] + offsets 
 
-    def _count_field_features(self, n_processes: int=os.cpu_count()): 
-        with mp.Pool(processes=n_processes) as pool: 
+    def _count_field_features(self, n_jobs: int=os.cpu_count()): 
+        with mp.Pool(processes=n_jobs) as pool: 
             return list(map(
                 functools.partial(functools.reduce, lambda x, y: x + y), 
                 zip(*tqdm(
                     pool.imap_unordered(
                         functools.partial(Criteo._process_job, self.data_path), 
-                        iterable=(self.sample_offsets[i::n_processes] for i in range(n_processes))
+                        iterable=((i, self.sample_offsets[i::n_jobs]) for i in range(n_jobs))
                     ),  
                     desc='[Counting Field Features]'
                 ))
             ))
 
     @classmethod
-    def _process_job(cls, data_path: str, sample_offsets: list): 
+    def _process_job(cls, data_path: str, task: tuple):
+        job_id, sample_offsets = task  
         field_features_count = [Counter() for _ in range(Criteo.NUM_FIELDS)]
         with open(data_path, mode='rb') as infile:
-            for offset in tqdm(sample_offsets, desc='[Process Job]'): 
+            for offset in tqdm(sample_offsets, desc=f'[Process Job]: {job_id}', position=job_id, leave=False): 
                 infile.seek(offset) 
                 Criteo._count_one_line(infile.readline(), field_features_count) 
         return field_features_count 
@@ -107,8 +108,8 @@ class Criteo(Dataset):
 if __name__ == '__main__': 
     data_path='./criteo.dev.txt'
     dataset = Criteo(data_path)
-    l1 = dataset._count_field_features(n_processes=4) 
-    l2 = dataset._count_field_features(n_processes=1) 
+    l1 = dataset._count_field_features(n_jobs=4) 
+    l2 = dataset._count_field_features(n_jobs=1) 
     print(l1[0]) 
     print('=========')
     print(l2[0])

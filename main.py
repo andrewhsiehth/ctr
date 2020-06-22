@@ -76,16 +76,26 @@ if __name__ == '__main__':
     criterion = torch.nn.BCEWithLogitsLoss() 
 
     print('[start triaing]') 
-    for epoch in range(args.n_epochs):
-        dataloader.sampler.set_epoch(epoch)
-        for batch in tqdm(dataloader, desc='[Training]'): 
-            record, label = batch 
-            logit = model(record) 
-            loss = criterion(logit, label.float().unsqueeze(-1)) 
-            optimizer.zero_grad() 
-            loss.backward() 
-            optimizer.step() 
-            print(f'loss: {loss.detach().item()}')
+    with tqdm(range(args.n_epochs), desc='[Epoch]', position=0, leave=True) as epbar: 
+        for epoch in epbar:
+            dataloader.sampler.set_epoch(epoch) 
+            y = [] 
+            y_true = []
+            with tqdm(dataloader, desc='[Batch]', position=1, leave=False) as pbar: 
+                for batch in pbar: 
+                    record, label = batch 
+                    logit = model(record) 
+                    loss = criterion(logit, label.float().unsqueeze(-1)) 
+                    optimizer.zero_grad() 
+                    loss.backward() 
+                    optimizer.step() 
+                    y.append(torch.sigmoid(logit.detach()).squeeze() >= 0.5) 
+                    y_true.append(label.bool()) 
+                    pbar.set_postfix(loss=f'{loss.detach().item():.4f}')
+            y = torch.cat(y, dim=0) 
+            y_true = torch.cat(y_true, dim=0) 
+            acc = (y == y_true).float().mean() 
+            epbar.set_postfix(acc=f'{acc.cpu().item():.4f}')
 
     print('[destroy process group]') 
     distributed.destroy_process_group() 

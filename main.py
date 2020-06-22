@@ -77,10 +77,10 @@ if __name__ == '__main__':
 
     print('[start triaing]') 
     for epoch in range(args.n_epochs):
+        dataloader.sampler.set_epoch(epoch)
         for batch in tqdm(dataloader, desc='[Training]'): 
             record, label = batch 
             logit = model(record) 
-            print(logit)
             loss = criterion(logit, label.float().unsqueeze(-1)) 
             optimizer.zero_grad() 
             loss.backward() 
@@ -89,5 +89,6 @@ if __name__ == '__main__':
 
     print('[destroy process group]') 
     distributed.destroy_process_group() 
+
 
 

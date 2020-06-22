@@ -1,0 +1,29 @@
+channels:
+  - pytorch
+  - conda-forge
+  - anaconda 
+  - defaults
+dependencies:
+  - conda-pack 
+  - python=3.7
+  - cudatoolkit>=10.0 
+  - pytorch>=1.5.0
+  - torchvision>=0.5.0
+  - tensorboard   
+  - scikit-learn 
+  - pandas>=1.0 
+  - tqdm 
+  - numpy 
+  - pyarrow
+  - pytest
+  - htop 
+  - tmux 
+  - ipython
+  - jupyter  
+  - easydict 
+  - setuptools
+  - twine 
+  - wheel 
+  - pip 
+
+

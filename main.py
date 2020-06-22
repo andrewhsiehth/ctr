@@ -89,7 +89,7 @@ if __name__ == '__main__':
                     optimizer.zero_grad() 
                     loss.backward() 
                     optimizer.step() 
-                    y.append(torch.sigmoid(logit.detach()).squeeze() >= 0.5) 
+                    y.append(torch.sigmoid(logit.detach()).squeeze().cpu() >= 0.5) 
                     y_true.append(label.bool()) 
                     pbar.set_postfix(loss=f'{loss.detach().item():.4f}')
             y = torch.cat(y, dim=0) 

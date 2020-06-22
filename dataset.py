@@ -79,10 +79,9 @@ class Criteo(Dataset):
 
     @classmethod
     def _process_job(cls, data_path: str, sample_offsets: list): 
-    # def _process_job(data_path: str, sample_offsets: list): 
         field_features_count = [Counter() for _ in range(Criteo.NUM_FIELDS)]
         with open(data_path, mode='rb') as infile:
-            for offset in sample_offsets: 
+            for offset in tqdm(sample_offsets, desc='[Process Job]'): 
                 infile.seek(offset) 
                 Criteo._count_one_line(infile.readline(), field_features_count) 
         return field_features_count 

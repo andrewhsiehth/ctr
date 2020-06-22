@@ -85,7 +85,7 @@ if __name__ == '__main__':
                 for batch in pbar: 
                     record, label = batch 
                     logit = model(record) 
-                    loss = criterion(logit, label.float().unsqueeze(-1)) 
+                    loss = criterion(logit, label.float().unsqueeze(-1).to(args.device)) 
                     optimizer.zero_grad() 
                     loss.backward() 
                     optimizer.step() 

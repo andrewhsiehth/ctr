@@ -1,7 +1,7 @@
 import torch 
 from torch.utils.data import Dataset 
 
-from tqdm.auto import tqdm 
+from tqdm import tqdm 
 
 from collections import Counter 
 import itertools 

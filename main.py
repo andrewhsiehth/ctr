@@ -10,7 +10,7 @@ from torch.nn.parallel import DistributedDataParallel
 from sklearn.metrics import accuracy_score 
 from sklearn.metrics import roc_auc_score 
 
-from tqdm.auto import tqdm 
+from tqdm import tqdm 
 
 from argparse import ArgumentParser 
 

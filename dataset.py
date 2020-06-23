@@ -1,7 +1,7 @@
 import torch 
 from torch.utils.data import Dataset 
 
-from tqdm import tqdm 
+from tqdm.autonotebook import tqdm 
 
 from collections import Counter 
 import itertools 
@@ -65,14 +65,14 @@ class Criteo(Dataset):
                 chunk_starts.append(infile.tell()) 
             chunk_starts.append(stat_result.st_size) 
         
-        with mp.Pool(processes=n_jobs, initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),)) as pool: 
+        with mp.Pool(processes=n_jobs, initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),), maxtasksperchild=1) as pool: 
             return list(itertools.chain.from_iterable(pool.imap(
                 functools.partial(Criteo._locate_sample_offsets_job, self.data_path), 
                 iterable=enumerate(zip(chunk_starts[:-1], chunk_starts[1:]))
             )))
 
     def _count_field_features(self, n_jobs: int=os.cpu_count()): 
-        with mp.Pool(processes=n_jobs, initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),)) as pool: 
+        with mp.Pool(processes=n_jobs, initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),), maxtasksperchild=1) as pool: 
             return list(map(
                 functools.partial(functools.reduce, lambda x, y: x + y), 
                 zip(*pool.imap_unordered(

@@ -16,8 +16,8 @@ class Criteo(Dataset):
     FIELDS_I = list(range(13)) 
     FIELDS_C = list(range(13, 39)) 
 
-    CACHE_SAMPLE_OFFSETS = '.sample_offsets.cache.pt' 
-    CACHE_FEATURE_MAPPING = '.feature_mapping.cache.pt'
+    CACHE_SAMPLE_OFFSETS = 'sample_offsets.cache.pt' 
+    CACHE_FEATURE_MAPPING = 'feature_mapping.cache.pt'
 
     def __init__(self, data_path: str, min_threshold: int=10): 
         self.data_path = data_path 

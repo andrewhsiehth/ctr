@@ -1,7 +1,7 @@
 import torch 
 from torch.utils.data import Dataset 
 
-from tqdm.autonotebook import tqdm 
+from tqdm.auto import tqdm 
 
 from collections import Counter 
 import itertools 
@@ -16,11 +16,17 @@ class Criteo(Dataset):
     FIELDS_I = list(range(13)) 
     FIELDS_C = list(range(13, 39)) 
 
+    CACHE_SAMPLE_OFFSETS = '.sample_offsets.cache.pt' 
+    CACHE_FEATURE_MAPPING = '.feature_mapping.cache.pt'
+
     def __init__(self, data_path: str, min_threshold: int=10): 
         self.data_path = data_path 
         self.min_threshold = min_threshold 
-        self.sample_offsets = self._locate_sample_offsets() 
-
+        self.sample_offsets = None 
+        self.feature_mapping = None 
+        self.feature_default = None 
+        
+        self._locate_sample_offsets()  
         self._build_feature_mapping() 
         
     def __len__(self): 
@@ -37,13 +43,17 @@ class Criteo(Dataset):
         return [(f + 1) for f in self.feature_default]  
         
     def _build_feature_mapping(self): 
-        self.feature_mapping = [
-            {
-                feature: feature_id for feature_id, feature in enumerate(
-                    feature for feature, count in sorted(field.items()) if count >= self.min_threshold 
-                )
-            } for field in self._count_field_features() 
-        ] 
+        if os.path.exists(Criteo.CACHE_FEATURE_MAPPING):
+            self.feature_mapping = torch.load(Criteo.CACHE_FEATURE_MAPPING) 
+        else: 
+            self.feature_mapping = [
+                {
+                    feature: feature_id for feature_id, feature in enumerate(
+                        feature for feature, count in sorted(field.items()) if count >= self.min_threshold 
+                    )
+                } for field in self._count_field_features() 
+            ] 
+            torch.save(self.feature_mapping, Criteo.CACHE_FEATURE_MAPPING)
         self.feature_default = [len(m) for m in self.feature_mapping] 
 
     def _make_sample(self, line: str): 
@@ -55,6 +65,10 @@ class Criteo(Dataset):
         return torch.as_tensor(values), int(label)
 
     def _locate_sample_offsets(self, n_jobs: int=os.cpu_count()): 
+        if os.path.exists(Criteo.CACHE_SAMPLE_OFFSETS): 
+            self.sample_offsets = torch.load(Criteo.CACHE_SAMPLE_OFFSETS) 
+            return 
+        
         stat_result = os.stat(self.data_path) 
         chunk_size, _ = divmod(stat_result.st_size, n_jobs) 
         chunk_starts = [0]
@@ -66,10 +80,11 @@ class Criteo(Dataset):
             chunk_starts.append(stat_result.st_size) 
         
         with mp.Pool(processes=n_jobs, initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),), maxtasksperchild=1) as pool: 
-            return list(itertools.chain.from_iterable(pool.imap(
+            self.sample_offsets = list(itertools.chain.from_iterable(pool.imap(
                 functools.partial(Criteo._locate_sample_offsets_job, self.data_path), 
                 iterable=enumerate(zip(chunk_starts[:-1], chunk_starts[1:]))
-            )))
+            ))) 
+        torch.save(self.sample_offsets, Criteo.CACHE_SAMPLE_OFFSETS)
 
     def _count_field_features(self, n_jobs: int=os.cpu_count()): 
         with mp.Pool(processes=n_jobs, initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),), maxtasksperchild=1) as pool: 

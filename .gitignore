@@ -1,5 +1,7 @@
 # data 
 data/
+*.pkl
+*.pt
 
 # vscode 
 .vscode

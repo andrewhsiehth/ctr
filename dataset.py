@@ -71,13 +71,13 @@ class Criteo(Dataset):
         
         stat_result = os.stat(self.data_path) 
         chunk_size, _ = divmod(stat_result.st_size, n_jobs) 
+        
         chunk_starts = [0]
-
         with open(self.data_path, mode='rb') as infile: 
-            while infile.seek(chunk_size, os.SEEK_CUR) < stat_result.st_size: 
+            while infile.tell() < stat_result.st_size: 
+                infile.seek(chunk_size, os.SEEK_CUR) 
                 infile.readline() 
-                chunk_starts.append(infile.tell()) 
-            chunk_starts.append(stat_result.st_size) 
+                chunk_starts.append(min(infile.tell(), stat_result.st_size)) 
         
         with mp.Pool(processes=n_jobs, initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),), maxtasksperchild=1) as pool: 
             self.sample_offsets = list(itertools.chain.from_iterable(pool.imap(

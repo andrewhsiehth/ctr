@@ -7,6 +7,9 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler 
 from torch.nn.parallel import DistributedDataParallel 
 
+from sklearn.metrics import accuracy_score 
+from sklearn.metrics import roc_auc_score 
+
 from tqdm.auto import tqdm 
 
 from argparse import ArgumentParser 
@@ -16,7 +19,7 @@ import os
 def parse_args(): 
     parser = ArgumentParser() 
     parser.add_argument('--data_path', type=str, required=True) 
-    parser.add_argument('--num_workers', type=int, default=os.cpu_count()) 
+    parser.add_argument('--num_workers', type=int, default=0) 
     parser.add_argument('--batch_size', type=int, default=256) 
     parser.add_argument('--min_threshold', type=int, default=8) 
     parser.add_argument('--backend', type=str, default=distributed.Backend.NCCL)
@@ -76,26 +79,33 @@ if __name__ == '__main__':
     criterion = torch.nn.BCEWithLogitsLoss() 
 
     print('[start triaing]') 
+    best_acc = 0.0 
+    best_roc_auc = 0.0 
     with tqdm(range(args.n_epochs), desc='[Epoch]', position=0, leave=True) as epbar: 
         for epoch in epbar:
             dataloader.sampler.set_epoch(epoch) 
-            y = [] 
+            y_score = [] 
             y_true = []
             with tqdm(dataloader, desc='[Batch]', position=1, leave=False) as pbar: 
                 for batch in pbar: 
                     record, label = batch 
+                    record = record.to(args.device) 
+                    label = label.to(args.device) 
                     logit = model(record) 
-                    loss = criterion(logit, label.float().unsqueeze(-1).to(args.device)) 
+                    loss = criterion(logit.squeeze(), label.float()) 
                     optimizer.zero_grad() 
                     loss.backward() 
                     optimizer.step() 
-                    y.append(torch.sigmoid(logit.detach()).squeeze().cpu() >= 0.5) 
+                    pbar.set_postfix(loss=f'{loss.detach().item():.4f}') 
+                    y_score.append(torch.sigmoid(logit.detach())) 
                     y_true.append(label.bool()) 
-                    pbar.set_postfix(loss=f'{loss.detach().item():.4f}')
-            y = torch.cat(y, dim=0) 
-            y_true = torch.cat(y_true, dim=0) 
-            acc = (y == y_true).float().mean() 
-            epbar.set_postfix(acc=f'{acc.cpu().item():.4f}')
+            y_score = torch.cat(y_score, dim=0).cpu().numpy()  
+            y_true = torch.cat(y_true, dim=0).cpu().numpy() 
+            acc = accuracy_score(y_true=y_true, y_pred=(y_score > 0.5))
+            roc_auc = roc_auc_score(y_true=y_true, y_score=y_score)
+            best_acc = max(best_acc, acc) 
+            best_roc_auc = max(best_roc_auc, roc_auc) 
+            epbar.set_postfix(acc=f'{best_acc:.4f}', roc_auc=f'{best_roc_auc:.4f}')
 
     print('[destroy process group]') 
     distributed.destroy_process_group() 

@@ -86,8 +86,8 @@ if __name__ == '__main__':
             dataloader.sampler.set_epoch(epoch) 
             y_score = [] 
             y_true = []
-            with tqdm(dataloader, desc='[Batch]', position=1, leave=False) as pbar: 
-                for batch in pbar: 
+            with tqdm(dataloader, desc='[Batch]', position=1, leave=False) as bpbar: 
+                for batch in bpbar: 
                     record, label = batch 
                     record = record.to(args.device) 
                     label = label.to(args.device) 
@@ -96,7 +96,7 @@ if __name__ == '__main__':
                     optimizer.zero_grad() 
                     loss.backward() 
                     optimizer.step() 
-                    pbar.set_postfix(loss=f'{loss.detach().item():.4f}') 
+                    bpbar.set_postfix(loss=f'{loss.detach().item():.4f}') 
                     y_score.append(torch.sigmoid(logit.detach())) 
                     y_true.append(label.bool()) 
             y_score = torch.cat(y_score, dim=0).cpu().numpy()  
@@ -110,5 +110,6 @@ if __name__ == '__main__':
     print('[destroy process group]') 
     distributed.destroy_process_group() 
 
+    print('[done]')
 
 

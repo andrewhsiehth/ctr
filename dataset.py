@@ -4,6 +4,7 @@ from torch.utils.data import Dataset
 from tqdm.auto import tqdm 
 
 from collections import Counter 
+import itertools 
 import functools
 import os 
 import math 
@@ -53,38 +54,56 @@ class Criteo(Dataset):
             values[field_id] = self.feature_mapping[field_id].get(values[field_id], self.feature_default[field_id]) 
         return torch.as_tensor(values), int(label)
 
-    def _locate_sample_offsets(self): 
+    def _locate_sample_offsets(self, n_jobs: int=os.cpu_count()): 
+        stat_result = os.stat(self.data_path) 
+        chunk_size, _ = divmod(stat_result.st_size, n_jobs) 
+        chunk_starts = [0]
+
         with open(self.data_path, mode='rb') as infile: 
-            offsets = [
-                infile.tell() for _ in tqdm(
-                    iter(infile.readline, b''), 
-                    desc='[Locate Line Offsets]'
-                )
-            ]
-        offsets.pop(-1) 
-        return [0] + offsets 
+            while infile.seek(chunk_size, os.SEEK_CUR) < stat_result.st_size: 
+                infile.readline() 
+                chunk_starts.append(infile.tell()) 
+            chunk_starts.append(stat_result.st_size) 
+        
+        with mp.Pool(processes=n_jobs, initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),)) as pool: 
+            return list(itertools.chain.from_iterable(pool.imap(
+                functools.partial(Criteo._locate_sample_offsets_job, self.data_path), 
+                iterable=enumerate(zip(chunk_starts[:-1], chunk_starts[1:]))
+            )))
 
     def _count_field_features(self, n_jobs: int=os.cpu_count()): 
-        with mp.Pool(processes=n_jobs) as pool: 
+        with mp.Pool(processes=n_jobs, initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),)) as pool: 
             return list(map(
                 functools.partial(functools.reduce, lambda x, y: x + y), 
-                zip(*tqdm(
-                    pool.imap_unordered(
-                        functools.partial(Criteo._process_job, self.data_path), 
-                        iterable=((i, self.sample_offsets[i::n_jobs]) for i in range(n_jobs))
-                    ),  
-                    desc='[Counting Field Features]'
+                zip(*pool.imap_unordered(
+                    functools.partial(Criteo._count_field_features_job, self.data_path), 
+                    iterable=((i, self.sample_offsets[i::n_jobs]) for i in range(n_jobs))
                 ))
-            ))
+            )) 
+
+    @classmethod 
+    def _locate_sample_offsets_job(cls, data_path: str, task: tuple): 
+        job_id, (start, end) = task  
+        offsets = [start] 
+        with open(data_path, mode='rb') as infile: 
+            infile.seek(start, os.SEEK_SET) 
+            with tqdm(total=None, desc=f'[Loacate Sample Offsets] job: {job_id}', position=job_id) as pbar: 
+                while infile.tell() < end: 
+                    infile.readline() 
+                    offsets.append(infile.tell()) 
+                    pbar.update()  
+            assert offsets.pop() == end 
+        return offsets 
 
     @classmethod
-    def _process_job(cls, data_path: str, task: tuple):
+    def _count_field_features_job(cls, data_path: str, task: tuple):
         job_id, sample_offsets = task  
         field_features_count = [Counter() for _ in range(Criteo.NUM_FIELDS)]
         with open(data_path, mode='rb') as infile:
-            for offset in tqdm(sample_offsets, desc=f'[Process Job]: {job_id}', position=job_id, leave=False): 
-                infile.seek(offset) 
-                Criteo._count_one_line(infile.readline(), field_features_count) 
+            with tqdm(sample_offsets, desc=f'[Counting Field Features] job: {job_id}', position=job_id) as pbar: 
+                for offset in pbar: 
+                    infile.seek(offset) 
+                    Criteo._count_one_line(infile.readline(), field_features_count) 
         return field_features_count 
 
     @classmethod 
@@ -106,17 +125,6 @@ class Criteo(Dataset):
             return str(value - 2)
 
 if __name__ == '__main__': 
-    data_path='./criteo.dev.txt'
-    dataset = Criteo(data_path)
-    l1 = dataset._count_field_features(n_jobs=4) 
-    l2 = dataset._count_field_features(n_jobs=1) 
-    print(l1[0]) 
-    print('=========')
-    print(l2[0])
-    print(l1 == l2)
-    print(len(dataset))
-
-    print(dataset[10])
-
-
-
+    data_path='./data/criteo.dev.txt'
+    dataset = Criteo(data_path) 
+    print(dataset[0])

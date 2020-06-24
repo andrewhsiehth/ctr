@@ -63,49 +63,53 @@ if __name__ == '__main__':
         num_workers=args.num_workers 
     )
 
-    print('[init model]') 
-    model = DistributedDataParallel(DeepFM(
-        field_dims=dataset.field_dims, 
-        embedding_dim=args.embedding_dim, 
-        out_features=args.out_features, 
-        hidden_units=args.hidden_units, 
-        dropout_rates=args.dropout_rates 
-    ).to(args.device))
+    print('DEBUG [run though dataloader]')
+    for batch in tqdm(dataloader, desc='debug'): 
+        record, label = batch 
 
-    print('[init optimizer]') 
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr) 
+    # print('[init model]') 
+    # model = DistributedDataParallel(DeepFM(
+    #     field_dims=dataset.field_dims, 
+    #     embedding_dim=args.embedding_dim, 
+    #     out_features=args.out_features, 
+    #     hidden_units=args.hidden_units, 
+    #     dropout_rates=args.dropout_rates 
+    # ).to(args.device))
 
-    print('[init criterion]') 
-    criterion = torch.nn.BCEWithLogitsLoss() 
+    # print('[init optimizer]') 
+    # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr) 
 
-    print('[start triaing]') 
-    best_acc = 0.0 
-    best_roc_auc = 0.0 
-    with tqdm(range(args.n_epochs), desc='[Epoch]', position=0, leave=True) as epbar: 
-        for epoch in epbar:
-            dataloader.sampler.set_epoch(epoch) 
-            y_score = [] 
-            y_true = []
-            with tqdm(dataloader, desc='[Batch]', position=1, leave=False) as bpbar: 
-                for batch in bpbar: 
-                    record, label = batch 
-                    record = record.to(args.device) 
-                    label = label.to(args.device) 
-                    logit = model(record) 
-                    loss = criterion(logit.squeeze(), label.float()) 
-                    optimizer.zero_grad() 
-                    loss.backward() 
-                    optimizer.step() 
-                    bpbar.set_postfix(loss=f'{loss.detach().item():.4f}') 
-                    y_score.append(torch.sigmoid(logit.detach())) 
-                    y_true.append(label.bool()) 
-            y_score = torch.cat(y_score, dim=0).cpu().numpy()  
-            y_true = torch.cat(y_true, dim=0).cpu().numpy() 
-            acc = accuracy_score(y_true=y_true, y_pred=(y_score > 0.5))
-            roc_auc = roc_auc_score(y_true=y_true, y_score=y_score)
-            best_acc = max(best_acc, acc) 
-            best_roc_auc = max(best_roc_auc, roc_auc) 
-            epbar.set_postfix(acc=f'{best_acc:.4f}', roc_auc=f'{best_roc_auc:.4f}')
+    # print('[init criterion]') 
+    # criterion = torch.nn.BCEWithLogitsLoss() 
+
+    # print('[start triaing]') 
+    # best_acc = 0.0 
+    # best_roc_auc = 0.0 
+    # with tqdm(range(args.n_epochs), desc='[Epoch]', position=0, leave=True) as epbar: 
+    #     for epoch in epbar:
+    #         dataloader.sampler.set_epoch(epoch) 
+    #         y_score = [] 
+    #         y_true = []
+    #         with tqdm(dataloader, desc='[Batch]', position=1, leave=False) as bpbar: 
+    #             for batch in bpbar: 
+    #                 record, label = batch 
+    #                 record = record.to(args.device) 
+    #                 label = label.to(args.device) 
+    #                 logit = model(record) 
+    #                 loss = criterion(logit.squeeze(), label.float()) 
+    #                 optimizer.zero_grad() 
+    #                 loss.backward() 
+    #                 optimizer.step() 
+    #                 bpbar.set_postfix(loss=f'{loss.detach().item():.4f}') 
+    #                 y_score.append(torch.sigmoid(logit.detach())) 
+    #                 y_true.append(label.bool()) 
+    #         y_score = torch.cat(y_score, dim=0).cpu().numpy()  
+    #         y_true = torch.cat(y_true, dim=0).cpu().numpy() 
+    #         acc = accuracy_score(y_true=y_true, y_pred=(y_score > 0.5))
+    #         roc_auc = roc_auc_score(y_true=y_true, y_score=y_score)
+    #         best_acc = max(best_acc, acc) 
+    #         best_roc_auc = max(best_roc_auc, roc_auc) 
+    #         epbar.set_postfix(acc=f'{best_acc:.4f}', roc_auc=f'{best_roc_auc:.4f}')
 
     print('[destroy process group]') 
     distributed.destroy_process_group() 

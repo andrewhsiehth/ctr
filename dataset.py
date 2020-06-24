@@ -10,7 +10,6 @@ import os
 import math 
 import multiprocessing as mp 
 
-
 class Criteo(Dataset):  
     NUM_FIELDS = 39 
     FIELDS_I = list(range(13)) 
@@ -25,7 +24,7 @@ class Criteo(Dataset):
         self.sample_offsets = None 
         self.feature_mapping = None 
         self.feature_default = None 
-        
+
         self._locate_sample_offsets()  
         self._build_feature_mapping() 
         
@@ -41,7 +40,7 @@ class Criteo(Dataset):
     @property 
     def field_dims(self): 
         return [(f + 1) for f in self.feature_default]  
-        
+    
     def _build_feature_mapping(self): 
         if os.path.exists(Criteo.CACHE_FEATURE_MAPPING):
             self.feature_mapping = torch.load(Criteo.CACHE_FEATURE_MAPPING) 
@@ -56,7 +55,7 @@ class Criteo(Dataset):
             torch.save(self.feature_mapping, Criteo.CACHE_FEATURE_MAPPING)
         self.feature_default = [len(m) for m in self.feature_mapping] 
 
-    def _make_sample(self, line: str): 
+    def _make_sample(self, line: bytes): 
         label, *values = line.rstrip(b'\n').split(b'\t') 
         for field_id in Criteo.FIELDS_I: 
             values[field_id] = self.feature_mapping[field_id].get(Criteo._quantize_I_feature(values[field_id]), self.feature_default[field_id]) 
@@ -84,6 +83,7 @@ class Criteo(Dataset):
                 functools.partial(Criteo._locate_sample_offsets_job, self.data_path), 
                 iterable=enumerate(zip(chunk_starts[:-1], chunk_starts[1:]))
             ))) 
+
         torch.save(self.sample_offsets, Criteo.CACHE_SAMPLE_OFFSETS)
 
     def _count_field_features(self, n_jobs: int=os.cpu_count()): 
@@ -130,7 +130,7 @@ class Criteo(Dataset):
                 field_features_count[field_id][values[field_id]] += 1    
     
     @classmethod
-    def _quantize_I_feature(cls, value: str): 
+    def _quantize_I_feature(cls, value: bytes): 
         if value == b'': 
             return 'NULL' 
         value = int(value) 
@@ -139,7 +139,5 @@ class Criteo(Dataset):
         else: 
             return str(value - 2)
 
-if __name__ == '__main__': 
-    data_path='./data/criteo.dev.txt'
-    dataset = Criteo(data_path) 
-    print(dataset[0])
+
+

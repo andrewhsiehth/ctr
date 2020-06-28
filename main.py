@@ -1,14 +1,14 @@
 from dataset import Criteo 
 from model import DeepFM 
+from procedure import train 
+from procedure import evaluate 
 
 import torch 
+from torch import nn 
 from torch import distributed 
 from torch.utils.data import DataLoader 
 from torch.utils.data.distributed import DistributedSampler 
 from torch.nn.parallel import DistributedDataParallel 
-
-from sklearn.metrics import accuracy_score 
-from sklearn.metrics import roc_auc_score 
 
 from tqdm.auto import tqdm 
 
@@ -18,10 +18,11 @@ import os
 
 def parse_args(): 
     parser = ArgumentParser() 
-    parser.add_argument('--data_path', type=str, required=True) 
-    parser.add_argument('--num_workers', type=int, default=0) 
+    parser.add_argument('--dataset_root', type=str, required=True) 
+    parser.add_argument('--checkpoint_dir', type=str, required=True)
+    parser.add_argument('--num_workers', type=int, default=os.cpu_count()) 
     parser.add_argument('--batch_size', type=int, default=256) 
-    parser.add_argument('--min_threshold', type=int, default=8) 
+    parser.add_argument('--min_threshold', type=int, default=10) 
     parser.add_argument('--backend', type=str, default=distributed.Backend.NCCL)
     parser.add_argument('--init_method', type=str, default='tcp://127.0.0.1:23456')
     parser.add_argument('--world_size', type=int, default=1) 
@@ -44,33 +45,61 @@ if __name__ == '__main__':
     print(args) 
 
     print('[prepare data]') 
-    dataset = Criteo(data_path=args.data_path, min_threshold=args.min_threshold)  
+    trainset, testset = Criteo.prepare_Criteo(
+        root=args.dataset_root, 
+        min_threshold=args.min_threshold, 
+        n_jobs=os.cpu_count() 
+    )  
 
     print('[init process group]') 
-    distributed.init_process_group(
-        backend=args.backend, 
-        init_method=args.init_method, 
-        world_size=args.world_size, 
-        rank=args.rank 
-    )
+    # distributed.init_process_group(
+    #     backend=args.backend, 
+    #     init_method=args.init_method, 
+    #     world_size=args.world_size, 
+    #     rank=args.rank 
+    # )
+    torch.set_num_interop_threads(args.num_workers)
     torch.manual_seed(args.seed) 
 
     print('[init dataloader]') 
-    dataloader = DataLoader(
-        dataset=dataset, 
+    trainloader = DataLoader(
+        dataset=trainset, 
         batch_size=args.batch_size, 
-        sampler=DistributedSampler(dataset), 
-        num_workers=args.num_workers 
+        shuffle=True, 
+        num_workers=args.num_workers, 
+        drop_last=False
+    )
+    # trainloader = DataLoader(
+    #     dataset=trainset, 
+    #     batch_size=args.batch_size, 
+    #     sampler=DistributedSampler(trainset), 
+    #     num_workers=args.num_workers
+    # )
+    testloader = DataLoader(
+        dataset=testset, 
+        batch_size=args.batch_size, 
+        shuffle=False, 
+        num_workers=args.num_workers, 
+        drop_last=False
     )
 
     print('[init model]') 
-    model = DistributedDataParallel(DeepFM(
-        field_dims=dataset.field_dims, 
-        embedding_dim=args.embedding_dim, 
-        out_features=args.out_features, 
-        hidden_units=args.hidden_units, 
-        dropout_rates=args.dropout_rates 
-    ).to(args.device))
+    model = nn.DataParallel(
+        module=DeepFM(
+            field_dims=trainset.field_dims, 
+            embedding_dim=args.embedding_dim, 
+            out_features=args.out_features, 
+            hidden_units=args.hidden_units, 
+            dropout_rates=args.dropout_rates 
+        ).to(args.device) 
+    ) 
+    # model = DistributedDataParallel(DeepFM(
+    #     field_dims=dataset.field_dims, 
+    #     embedding_dim=args.embedding_dim, 
+    #     out_features=args.out_features, 
+    #     hidden_units=args.hidden_units, 
+    #     dropout_rates=args.dropout_rates 
+    # ).to(args.device))
 
     print('[init optimizer]') 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr) 
@@ -81,34 +110,30 @@ if __name__ == '__main__':
     print('[start triaing]') 
     best_acc = 0.0 
     best_roc_auc = 0.0 
-    with tqdm(range(args.n_epochs), desc='[Epoch]', position=0, leave=True) as epbar: 
-        for epoch in epbar:
-            dataloader.sampler.set_epoch(epoch) 
-            y_score = [] 
-            y_true = []
-            with tqdm(dataloader, desc='[Batch]', position=1, leave=False) as bpbar: 
-                for batch in bpbar: 
-                    record, label = batch 
-                    record = record.to(args.device) 
-                    label = label.to(args.device) 
-                    logit = model(record) 
-                    loss = criterion(logit.squeeze(), label.float()) 
-                    optimizer.zero_grad() 
-                    loss.backward() 
-                    optimizer.step() 
-                    bpbar.set_postfix(loss=f'{loss.detach().item():.4f}') 
-                    y_score.append(torch.sigmoid(logit.detach())) 
-                    y_true.append(label.bool()) 
-            y_score = torch.cat(y_score, dim=0).cpu().numpy()  
-            y_true = torch.cat(y_true, dim=0).cpu().numpy() 
-            acc = accuracy_score(y_true=y_true, y_pred=(y_score > 0.5))
-            roc_auc = roc_auc_score(y_true=y_true, y_score=y_score)
-            best_acc = max(best_acc, acc) 
+    with tqdm(range(args.n_epochs), desc='[Epoch]', position=0, leave=True) as pbar: 
+        for epoch in pbar:
+            # trainloader.sampler.set_epoch(epoch) 
+            train(
+                model=model, 
+                dataloader=trainloader, 
+                optimizer=optimizer, 
+                criterion=criterion, 
+                device=args.device 
+            ) 
+            roc_auc, accuracy, loss = evaluate(
+                model=model, 
+                dataloader=testloader, 
+                criterion=criterion, 
+                device=args.device 
+            )
+            if roc_auc > best_roc_auc: 
+                torch.save(model.module, os.path.join(args.checkpoint_dir, 'best.pt'))
+            best_acc = max(best_acc, accuracy) 
             best_roc_auc = max(best_roc_auc, roc_auc) 
-            epbar.set_postfix(acc=f'{best_acc:.4f}', roc_auc=f'{best_roc_auc:.4f}')
+            pbar.set_postfix(acc=f'{best_acc:.4f}', roc_auc=f'{best_roc_auc:.4f}') 
 
     print('[destroy process group]') 
-    distributed.destroy_process_group() 
+    # distributed.destroy_process_group() 
 
     print('[done]')
 

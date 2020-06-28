@@ -58,7 +58,7 @@ if __name__ == '__main__':
     #     world_size=args.world_size, 
     #     rank=args.rank 
     # )
-    torch.set_num_interop_threads(args.num_workers)
+    # torch.set_num_interop_threads(args.num_workers)
     torch.manual_seed(args.seed) 
 
     print('[init dataloader]') 

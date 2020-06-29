@@ -120,6 +120,8 @@ if __name__ == '__main__':
                 criterion=criterion, 
                 device=args.device 
             ) 
+            if epoch == 0: # force save before oom
+                torch.save(model.module, os.path.join(args.checkpoint_dir, 'best.pt'))
             roc_auc, accuracy, loss = evaluate(
                 model=model, 
                 dataloader=testloader, 

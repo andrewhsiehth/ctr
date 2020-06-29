@@ -1,6 +1,8 @@
 import torch 
 from torch.utils.data import Dataset 
 
+import numpy as np
+
 from tqdm.auto import tqdm 
 
 import typing 
@@ -27,26 +29,26 @@ class Criteo(Dataset):
     CACHE_SAMPLE_OFFSETS_TEST = 'sample_offsets_test.cache.pt' 
     CACHE_FEATURE_MAPPING = 'feature_mapping.cache.pt'
 
-    def __init__(self, data_path: str, sample_offsets: List[int], feature_mapping: List[Dict[bytes, int]], feature_default: List[Dict[bytes, int]]): 
+    def __init__(self, data_path: str, sample_offsets: np.ndarray, feature_mapping: List[Dict[bytes, int]], feature_default: List[Dict[bytes, int]]): 
         self.data_path = data_path   
         self.sample_offsets = sample_offsets  
         self.feature_mapping = feature_mapping  
         self.feature_default = feature_default  
         
-    def __len__(self): 
+    def __len__(self) -> int: 
         return len(self.sample_offsets) 
 
-    def __getitem__(self, idx): 
+    def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor]: 
         with open(self.data_path, mode='rb') as infile: 
             infile.seek(self.sample_offsets[idx]) 
             line = infile.readline() 
         return self._make_sample(line) 
 
     @property 
-    def field_dims(self): 
+    def field_dims(self) -> List[int]: 
         return [(f + 1) for f in self.feature_default]  
     
-    def _make_sample(self, line: bytes): 
+    def _make_sample(self, line: bytes) -> Tuple[torch.Tensor, torch.Tensor]: 
         label, *values = line.rstrip(b'\n').split(b'\t') 
         for field_id in Criteo.FIELDS_I: 
             values[field_id] = self.feature_mapping[field_id].get(Criteo._quantize_I_feature(values[field_id]), self.feature_default[field_id]) 
@@ -55,7 +57,7 @@ class Criteo(Dataset):
         return torch.as_tensor(values), torch.as_tensor([float(label)]) 
 
     @classmethod 
-    def prepare_Criteo(cls, root: str, min_threshold: int=10, n_jobs: int=os.cpu_count()): 
+    def prepare_Criteo(cls, root: str, min_threshold: int=10, n_jobs: int=os.cpu_count()) -> Tuple[Dataset, Dataset]: 
         if os.path.exists(Criteo.CACHE_SAMPLE_OFFSETS_TRAIN): 
             sample_offsets_train = torch.load(Criteo.CACHE_SAMPLE_OFFSETS_TRAIN)
         else: 
@@ -101,7 +103,7 @@ class Criteo(Dataset):
         return dataset_train, dataset_test 
 
     @classmethod 
-    def _build_feature_mapping(cls, data_path: str, sample_offsets: List[int], min_threshold: int, n_jobs: int): 
+    def _build_feature_mapping(cls, data_path: str, sample_offsets: np.ndarray, min_threshold: int, n_jobs: int) -> List[Dict[bytes, int]]: 
         return [
             {
                 feature: feature_id for feature_id, feature in enumerate(
@@ -111,11 +113,11 @@ class Criteo(Dataset):
         ] 
 
     @classmethod
-    def _build_feature_default(cls, feature_mapping: List[Dict[bytes, int]]): 
+    def _build_feature_default(cls, feature_mapping: List[Dict[bytes, int]]) -> List[int]: 
         return [len(m) for m in feature_mapping] 
 
     @classmethod 
-    def _locate_sample_offsets(cls, data_path: str, n_jobs: int): 
+    def _locate_sample_offsets(cls, data_path: str, n_jobs: int) -> np.ndarray: 
         stat_result = os.stat(data_path) 
         chunk_size, _ = divmod(stat_result.st_size, n_jobs) 
         
@@ -125,15 +127,16 @@ class Criteo(Dataset):
                 infile.seek(chunk_size, os.SEEK_CUR) 
                 infile.readline() 
                 chunk_starts.append(min(infile.tell(), stat_result.st_size)) 
-        
+        chunk_starts = np.array(chunk_starts)
+
         with mp.Pool(processes=n_jobs, initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),), maxtasksperchild=1) as pool: 
-            return list(itertools.chain.from_iterable(pool.imap(
+            return np.array(list(itertools.chain.from_iterable(pool.imap(
                 functools.partial(Criteo._locate_sample_offsets_job, data_path), 
                 iterable=enumerate(zip(chunk_starts[:-1], chunk_starts[1:]))
-            ))) 
+            )))) 
 
     @classmethod 
-    def _count_field_features(cls, data_path: str, sample_offsets: List[int], n_jobs: int): 
+    def _count_field_features(cls, data_path: str, sample_offsets: np.ndarray, n_jobs: int) -> List[typing.Counter[bytes]]: 
         with mp.Pool(processes=n_jobs, initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),), maxtasksperchild=1) as pool: 
             return list(map(
                 functools.partial(functools.reduce, lambda x, y: x + y), 
@@ -144,7 +147,7 @@ class Criteo(Dataset):
             )) 
 
     @classmethod 
-    def _locate_sample_offsets_job(cls, data_path: str, task: Tuple[int, Tuple[int, int]]): 
+    def _locate_sample_offsets_job(cls, data_path: str, task: Tuple[int, Tuple[int, int]]) -> np.ndarray: 
         job_id, (start, end) = task  
         offsets = [start] 
         with open(data_path, mode='rb') as infile: 
@@ -155,10 +158,11 @@ class Criteo(Dataset):
                     offsets.append(infile.tell()) 
                     pbar.update()  
             assert offsets.pop() == end 
-        return offsets 
+        offsets = np.array(offsets) 
+        return offsets  
 
     @classmethod
-    def _count_field_features_job(cls, data_path: str, task: Tuple[int, List[int]]):
+    def _count_field_features_job(cls, data_path: str, task: Tuple[int, np.ndarray]) -> List[typing.Counter[bytes]]:
         job_id, sample_offsets = task  
         field_features_count = [Counter() for _ in range(Criteo.NUM_FIELDS)]
         with open(data_path, mode='rb') as infile:
@@ -169,7 +173,7 @@ class Criteo(Dataset):
         return field_features_count 
 
     @classmethod 
-    def _count_one_line(cls, line: bytes, field_features_count: List[typing.Counter[bytes]]): 
+    def _count_one_line(cls, line: bytes, field_features_count: List[typing.Counter[bytes]]) -> None: 
         label, *values = line.rstrip(b'\n').split(b'\t') 
         for field_id in Criteo.FIELDS_I: 
                 field_features_count[field_id][Criteo._quantize_I_feature(values[field_id])] += 1 
@@ -177,7 +181,7 @@ class Criteo(Dataset):
                 field_features_count[field_id][values[field_id]] += 1    
     
     @classmethod 
-    def _quantize_I_feature(cls, value: bytes): 
+    def _quantize_I_feature(cls, value: bytes) -> str: 
         if value == b'': 
             return 'NULL' 
         value = int(value) 

@@ -50,6 +50,7 @@ class Criteo(Dataset):
     
     def _make_sample(self, line: bytes) -> Tuple[torch.Tensor, torch.Tensor]: 
         label, *values = line.rstrip(b'\n').split(b'\t') 
+        assert len(values) == Criteo.NUM_FIELDS 
         for field_id in Criteo.FIELDS_I: 
             values[field_id] = self.feature_mapping[field_id].get(Criteo._quantize_I_feature(values[field_id]), self.feature_default[field_id]) 
         for field_id in Criteo.FIELDS_C: 
@@ -175,6 +176,7 @@ class Criteo(Dataset):
     @classmethod 
     def _count_one_line(cls, line: bytes, field_features_count: List[typing.Counter[bytes]]) -> None: 
         label, *values = line.rstrip(b'\n').split(b'\t') 
+        assert len(values) == Criteo.NUM_FIELDS 
         for field_id in Criteo.FIELDS_I: 
                 field_features_count[field_id][Criteo._quantize_I_feature(values[field_id])] += 1 
         for field_id in Criteo.FIELDS_C: 

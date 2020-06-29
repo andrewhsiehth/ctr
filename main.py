@@ -20,7 +20,7 @@ def parse_args():
     parser = ArgumentParser() 
     parser.add_argument('--dataset_root', type=str, required=True) 
     parser.add_argument('--checkpoint_dir', type=str, required=True)
-    parser.add_argument('--num_workers', type=int, default=os.cpu_count()) 
+    parser.add_argument('--num_workers', type=int, default=0) 
     parser.add_argument('--batch_size', type=int, default=2048) 
     parser.add_argument('--min_threshold', type=int, default=10) 
     parser.add_argument('--backend', type=str, default=distributed.Backend.NCCL)

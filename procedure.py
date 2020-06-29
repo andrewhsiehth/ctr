@@ -5,6 +5,8 @@ from sklearn.metrics import roc_auc_score
 
 import torch 
 
+import os 
+
 def prepare_batch(batch, device):  
     record, label = batch 
     assert label.dim() == 2 and record.dim() == 2, f'{record.shape}, {label.shape}'
@@ -12,7 +14,7 @@ def prepare_batch(batch, device):
 
 def train(model, dataloader, optimizer, criterion, device): 
     model.train() 
-    with tqdm(dataloader, desc='[Train]', position=1, leave=True) as pbar: 
+    with tqdm(dataloader, desc='[Train]', position=1, leave=True, disable=('DISABLE_TQDM' in os.environ)) as pbar: 
         with torch.enable_grad(): 
             for batch in pbar: 
                 record, label = prepare_batch(batch, device)  
@@ -28,7 +30,7 @@ def evaluate(model, dataloader, criterion, device):
     losses = torch.zeros((len(dataloader),)) 
     labels = torch.BoolTensor(size=(len(dataloader.dataset),))
     logits = torch.zeros((len(dataloader.dataset),)) 
-    with tqdm(range(len(dataloader)), desc='[Eval]', position=1, leave=True) as pbar: 
+    with tqdm(range(len(dataloader)), desc='[Eval]', position=1, leave=True, disable=('DISABLE_TQDM' in os.environ)) as pbar: 
         with torch.no_grad(): 
             for idx_batch, batch in enumerate(dataloader): 
                 record, label = prepare_batch(batch, device)

@@ -58,7 +58,6 @@ if __name__ == '__main__':
     #     world_size=args.world_size, 
     #     rank=args.rank 
     # )
-    # torch.set_num_interop_threads(args.num_workers)
     torch.manual_seed(args.seed) 
 
     print('[init dataloader]') 
@@ -110,7 +109,7 @@ if __name__ == '__main__':
     print('[start triaing]') 
     best_acc = 0.0 
     best_roc_auc = 0.0 
-    with tqdm(range(args.n_epochs), desc='[Epoch]', position=0, leave=True) as pbar: 
+    with tqdm(range(args.n_epochs), desc='[Epoch]', position=0, leave=True, disable=('DISABLE_TQDM' in os.environ)) as pbar: 
         for epoch in pbar:
             # trainloader.sampler.set_epoch(epoch) 
             train(

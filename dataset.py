@@ -152,7 +152,7 @@ class Criteo(Dataset):
         offsets = [start] 
         with open(data_path, mode='rb') as infile: 
             infile.seek(start, os.SEEK_SET) 
-            with tqdm(total=None, desc=f'[Loacate Sample Offsets] job: {job_id}', position=job_id) as pbar: 
+            with tqdm(total=None, desc=f'[Loacate Sample Offsets] job: {job_id}', position=job_id, disable=('DISABLE_TQDM' in os.environ)) as pbar: 
                 while infile.tell() < end: 
                     infile.readline() 
                     offsets.append(infile.tell()) 
@@ -166,7 +166,7 @@ class Criteo(Dataset):
         job_id, sample_offsets = task  
         field_features_count = [Counter() for _ in range(Criteo.NUM_FIELDS)]
         with open(data_path, mode='rb') as infile:
-            with tqdm(sample_offsets, desc=f'[Counting Field Features] job: {job_id}', position=job_id) as pbar: 
+            with tqdm(sample_offsets, desc=f'[Counting Field Features] job: {job_id}', position=job_id, disable=('DISABLE_TQDM' in os.environ)) as pbar: 
                 for offset in pbar: 
                     infile.seek(offset) 
                     Criteo._count_one_line(infile.readline(), field_features_count) 

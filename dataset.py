@@ -138,9 +138,10 @@ class Criteo(Dataset):
                     iterable=enumerate(zip(chunk_starts[:-1], chunk_starts[1:]))
                 ))))
             except KeyboardInterrupt as e: 
+                raise e 
+            finally: 
                 pool.terminate() # should be redundant
                 pool.join() 
-                raise e 
 
 
     @classmethod 
@@ -155,9 +156,11 @@ class Criteo(Dataset):
                     ))
                 )) 
             except KeyboardInterrupt as e: 
+                raise e 
+            finally: 
                 pool.terminate() # should be redundant
                 pool.join()
-                raise e 
+
 
     @classmethod 
     def _locate_sample_offsets_job(cls, data_path: str, task: Tuple[int, Tuple[int, int]]) -> List[int]: 

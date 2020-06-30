@@ -52,7 +52,7 @@ class Criteo(Dataset):
             fields[field_id] = self.feature_mapping[field_id].get(Criteo._quantize_I_feature(fields[field_id]), self.feature_default[field_id]) 
         for field_id in Criteo.FIELDS_C: 
             fields[field_id] = self.feature_mapping[field_id].get(fields[field_id], self.feature_default[field_id]) 
-        return torch.as_tensor(fields), torch.as_tensor([float(label)]) 
+        return torch.as_tensor(fields), float(label) 
 
     @classmethod 
     def prepare_Criteo(cls, root: str, min_threshold: int=10, n_jobs: int=os.cpu_count()) -> Tuple[Dataset, Dataset]: 
@@ -126,22 +126,32 @@ class Criteo(Dataset):
                 infile.readline() 
                 chunk_starts.append(min(infile.tell(), stat_result.st_size)) 
 
+
         with mp.Pool(processes=n_jobs, initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),), maxtasksperchild=1) as pool: 
-            return list(itertools.chain.from_iterable(pool.imap(
-                functools.partial(Criteo._locate_sample_offsets_job, data_path), 
-                iterable=enumerate(zip(chunk_starts[:-1], chunk_starts[1:]))
-            )))
+            try: 
+                return list(itertools.chain.from_iterable(pool.imap(
+                    functools.partial(Criteo._locate_sample_offsets_job, data_path), 
+                    iterable=enumerate(zip(chunk_starts[:-1], chunk_starts[1:]))
+                )))
+            except KeyboardInterrupt as e: 
+                pool.terminate() 
+                raise e 
+
 
     @classmethod 
     def _count_field_features(cls, data_path: str, sample_offsets: List[int], n_jobs: int) -> List[typing.Counter[bytes]]: 
         with mp.Pool(processes=n_jobs, initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),), maxtasksperchild=1) as pool: 
-            return list(map(
-                functools.partial(functools.reduce, lambda x, y: x + y), 
-                zip(*pool.imap_unordered(
-                    functools.partial(Criteo._count_field_features_job, data_path), 
-                    iterable=((i, sample_offsets[i::n_jobs]) for i in range(n_jobs))
-                ))
-            )) 
+            try: 
+                return list(map(
+                    functools.partial(functools.reduce, lambda x, y: x + y), 
+                    zip(*pool.imap_unordered(
+                        functools.partial(Criteo._count_field_features_job, data_path), 
+                        iterable=((i, sample_offsets[i::n_jobs]) for i in range(n_jobs))
+                    ))
+                )) 
+            except KeyboardInterrupt as e: 
+                pool.terminate() 
+                raise e 
 
     @classmethod 
     def _locate_sample_offsets_job(cls, data_path: str, task: Tuple[int, Tuple[int, int]]) -> List[int]: 

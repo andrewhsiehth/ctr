@@ -9,8 +9,8 @@ import os
 
 def prepare_batch(batch, device):  
     record, label = batch 
-    assert label.dim() == 2 and record.dim() == 2, f'{record.shape}, {label.shape}'
-    return (record.to(device), label.to(device)) 
+    assert label.dim() == 1 and record.dim() == 2, f'{record.shape}, {label.shape}'
+    return (record.to(device), label.unsqueeze(dim=-1).to(device)) 
 
 def train(model, dataloader, optimizer, criterion, device): 
     model.train() 

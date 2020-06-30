@@ -21,6 +21,7 @@ def parse_args():
     parser.add_argument('--dataset_root', type=str, required=True) 
     parser.add_argument('--checkpoint_dir', type=str, required=True)
     parser.add_argument('--num_workers', type=int, default=0) 
+    parser.add_argument('--num_threads', type=int, default=os.cpu_count()) 
     parser.add_argument('--batch_size', type=int, default=2048) 
     parser.add_argument('--min_threshold', type=int, default=10) 
     parser.add_argument('--backend', type=str, default=distributed.Backend.NCCL)
@@ -58,6 +59,7 @@ if __name__ == '__main__':
     #     world_size=args.world_size, 
     #     rank=args.rank 
     # )
+    torch.set_num_interop_threads(max(args.num_threads, torch.get_num_interop_threads()))
     torch.manual_seed(args.seed) 
 
     print('[init dataloader]') 

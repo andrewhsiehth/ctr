@@ -1,6 +1,9 @@
 import torch 
 from torch.utils.data import Dataset 
 
+import numpy as np 
+
+
 from tqdm.auto import tqdm 
 
 import typing 
@@ -21,15 +24,11 @@ class Criteo(Dataset):
     FIELDS_C = list(range(13, 39)) 
 
     TRAIN_FILE_NAME = 'train.txt' 
-    TEST_FILE_NAME = 'test.txt' 
+    CRITEO_CACHE = 'criteo.cache.pt'
 
-    CACHE_SAMPLE_OFFSETS_TRAIN = 'sample_offsets_train.cache.pt' 
-    CACHE_SAMPLE_OFFSETS_TEST = 'sample_offsets_test.cache.pt' 
-    CACHE_FEATURE_MAPPING = 'feature_mapping.cache.pt'
-
-    def __init__(self, data_path: str, sample_offsets: List[int], feature_mapping: List[Dict[bytes, int]], feature_default: List[Dict[bytes, int]]): 
+    def __init__(self, data_path: str, sample_offsets: np.ndarray, feature_mapping: List[Dict[bytes, int]], feature_default: List[Dict[bytes, int]]): 
         self.data_path = data_path   
-        self.sample_offsets = sample_offsets  
+        self.sample_offsets = sample_offsets 
         self.feature_mapping = feature_mapping  
         self.feature_default = feature_default  
         
@@ -55,50 +54,55 @@ class Criteo(Dataset):
         return torch.as_tensor(fields), float(label) 
 
     @classmethod 
-    def prepare_Criteo(cls, root: str, min_threshold: int=10, n_jobs: int=os.cpu_count()) -> Tuple[Dataset, Dataset]: 
-        if os.path.exists(Criteo.CACHE_SAMPLE_OFFSETS_TRAIN): 
-            sample_offsets_train = torch.load(Criteo.CACHE_SAMPLE_OFFSETS_TRAIN)
+    def prepare_Criteo(cls, root: str, min_threshold: int=10, val_split: float=0.1, n_jobs: int=os.cpu_count()) -> Tuple[Dataset, Dataset]: 
+        # check if cache available 
+        if os.path.exists(Criteo.CRITEO_CACHE): 
+            cache = torch.load(Criteo.CRITEO_CACHE) 
+            sample_offsets = cache['sample_offsets'] 
+            feature_mapping = cache['feature_mapping'] 
+            idx_train = cache['idx_train'] 
+            idx_val = cache['idx_val'] 
         else: 
-            sample_offsets_train = Criteo._locate_sample_offsets(
+            # locate the offset of each valid sample 
+            sample_offsets = Criteo._locate_sample_offsets(
                 data_path=os.path.join(root, Criteo.TRAIN_FILE_NAME), 
                 n_jobs=n_jobs
             ) 
-            torch.save(sample_offsets_train, Criteo.CACHE_SAMPLE_OFFSETS_TRAIN)
-        
-        if os.path.exists(Criteo.CACHE_FEATURE_MAPPING): 
-            feature_mapping = torch.load(Criteo.CACHE_FEATURE_MAPPING) 
-        else: 
+            # split training and testing set indices 
+            n_val = int(val_split * len(sample_offsets)) 
+            n_train = len(sample_offsets) - n_val 
+            idx_train, idx_val = np.split(np.random.permutation(len(sample_offsets)), indices_or_sections=(n_train,)) 
+            # use training set to build feature mapping 
             feature_mapping = Criteo._build_feature_mapping(
                 data_path=os.path.join(root, Criteo.TRAIN_FILE_NAME), 
-                sample_offsets=sample_offsets_train, 
+                sample_offsets=sample_offsets[idx_train], 
                 min_threshold=min_threshold,
                 n_jobs=n_jobs 
-            ) 
-            torch.save(feature_mapping, Criteo.CACHE_FEATURE_MAPPING) 
-        feature_default = Criteo._build_feature_default(feature_mapping=feature_mapping) 
-
-        if os.path.exists(Criteo.CACHE_SAMPLE_OFFSETS_TEST): 
-            sample_offsets_test = torch.load(Criteo.CACHE_SAMPLE_OFFSETS_TEST) 
-        else: 
-            sample_offsets_test = Criteo._locate_sample_offsets(
-                data_path=os.path.join(root, Criteo.TEST_FILE_NAME), 
-                n_jobs=n_jobs 
             )
-            torch.save(sample_offsets_test, Criteo.CACHE_SAMPLE_OFFSETS_TEST) 
-        
-        dataset_train = Criteo(
+            # save to cache 
+            torch.save({
+                'sample_offsets': sample_offsets, 
+                'feature_mapping': feature_mapping, 
+                'idx_train': idx_train, 
+                'idx_val': idx_val 
+            }, Criteo.CRITEO_CACHE) 
+        # always rebuild feature_default from feature_mapping 
+        feature_default = Criteo._build_feature_default(feature_mapping=feature_mapping) 
+        # make training set  
+        trainset = Criteo(
             data_path=os.path.join(root, Criteo.TRAIN_FILE_NAME), 
-            sample_offsets=sample_offsets_train, 
+            sample_offsets=sample_offsets[idx_train], 
             feature_mapping=feature_mapping, 
             feature_default=feature_default 
         ) 
-        dataset_test = Criteo(
-            data_path=os.path.join(root, Criteo.TEST_FILE_NAME), 
-            sample_offsets=sample_offsets_test, 
+        # make validation set 
+        valset = Criteo(
+            data_path=os.path.join(root, Criteo.TRAIN_FILE_NAME), 
+            sample_offsets=sample_offsets[idx_val], 
             feature_mapping=feature_mapping, 
             feature_default=feature_default 
         )
-        return dataset_train, dataset_test 
+        return trainset, valset 
 
     @classmethod 
     def _build_feature_mapping(cls, data_path: str, sample_offsets: List[int], min_threshold: int, n_jobs: int) -> List[Dict[bytes, int]]: 
@@ -115,7 +119,7 @@ class Criteo(Dataset):
         return [len(m) for m in feature_mapping] 
 
     @classmethod 
-    def _locate_sample_offsets(cls, data_path: str, n_jobs: int) -> List[int]: 
+    def _locate_sample_offsets(cls, data_path: str, n_jobs: int) -> np.ndarray: 
         stat_result = os.stat(data_path) 
         chunk_size, _ = divmod(stat_result.st_size, n_jobs) 
         
@@ -129,10 +133,10 @@ class Criteo(Dataset):
 
         with mp.Pool(processes=n_jobs, initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),), maxtasksperchild=1) as pool: 
             try: 
-                return list(itertools.chain.from_iterable(pool.imap(
+                return np.asarray(list(itertools.chain.from_iterable(pool.imap(
                     functools.partial(Criteo._locate_sample_offsets_job, data_path), 
                     iterable=enumerate(zip(chunk_starts[:-1], chunk_starts[1:]))
-                )))
+                ))))
             except KeyboardInterrupt as e: 
                 pool.terminate() 
                 raise e 

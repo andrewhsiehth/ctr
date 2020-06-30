@@ -35,6 +35,7 @@ def parse_args():
     parser.add_argument('--hidden_units', type=int, nargs='+', default=[400, 400, 400])
     parser.add_argument('--dropout_rates', type=float, nargs='+', default=[0.5, 0.5, 0.5])
     parser.add_argument('--lr', type=float, default=5e-4)
+    parser.add_argument('--val_split', type=float, default=0.1)
     parser.add_argument('--device', type=torch.device, default=torch.device('cuda:0'))
     args, extra = parser.parse_known_args() 
     return args 
@@ -46,9 +47,10 @@ if __name__ == '__main__':
     print(args) 
 
     print('[prepare data]') 
-    trainset, testset = Criteo.prepare_Criteo(
+    trainset, valset = Criteo.prepare_Criteo(
         root=args.dataset_root, 
-        min_threshold=args.min_threshold, 
+        min_threshold=args.min_threshold,
+        val_split=args.val_split,  
         n_jobs=os.cpu_count() 
     )  
 
@@ -76,8 +78,8 @@ if __name__ == '__main__':
     #     sampler=DistributedSampler(trainset), 
     #     num_workers=args.num_workers
     # )
-    testloader = DataLoader(
-        dataset=testset, 
+    valloader = DataLoader(
+        dataset=valset, 
         batch_size=args.batch_size, 
         shuffle=False, 
         num_workers=args.num_workers, 
@@ -125,7 +127,7 @@ if __name__ == '__main__':
                 torch.save(model.module, os.path.join(args.checkpoint_dir, 'best.pt'))
             roc_auc, accuracy, loss = evaluate(
                 model=model, 
-                dataloader=testloader, 
+                dataloader=valloader, 
                 criterion=criterion, 
                 device=args.device 
             )

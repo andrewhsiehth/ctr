@@ -138,7 +138,8 @@ class Criteo(Dataset):
                     iterable=enumerate(zip(chunk_starts[:-1], chunk_starts[1:]))
                 ))))
             except KeyboardInterrupt as e: 
-                pool.terminate() 
+                pool.terminate() # should be redundant
+                pool.join() 
                 raise e 
 
 
@@ -154,7 +155,8 @@ class Criteo(Dataset):
                     ))
                 )) 
             except KeyboardInterrupt as e: 
-                pool.terminate() 
+                pool.terminate() # should be redundant
+                pool.join()
                 raise e 
 
     @classmethod 

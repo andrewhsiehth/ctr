@@ -47,13 +47,12 @@ class Criteo(Dataset):
         return [(f + 1) for f in self.feature_default]  
     
     def _make_sample(self, line: bytes) -> Tuple[torch.Tensor, torch.Tensor]: 
-        label, *values = line.rstrip(b'\n').split(b'\t') 
-        assert len(values) == Criteo.NUM_FIELDS, f'{len(values)} != {Criteo.NUM_FIELDS}' 
+        label, fields = Criteo.parse_sample(line) 
         for field_id in Criteo.FIELDS_I: 
-            values[field_id] = self.feature_mapping[field_id].get(Criteo._quantize_I_feature(values[field_id]), self.feature_default[field_id]) 
+            fields[field_id] = self.feature_mapping[field_id].get(Criteo._quantize_I_feature(fields[field_id]), self.feature_default[field_id]) 
         for field_id in Criteo.FIELDS_C: 
-            values[field_id] = self.feature_mapping[field_id].get(values[field_id], self.feature_default[field_id]) 
-        return torch.as_tensor(values), torch.as_tensor([float(label)]) 
+            fields[field_id] = self.feature_mapping[field_id].get(fields[field_id], self.feature_default[field_id]) 
+        return torch.as_tensor(fields), torch.as_tensor([float(label)]) 
 
     @classmethod 
     def prepare_Criteo(cls, root: str, min_threshold: int=10, n_jobs: int=os.cpu_count()) -> Tuple[Dataset, Dataset]: 
@@ -152,7 +151,12 @@ class Criteo(Dataset):
             infile.seek(start, os.SEEK_SET) 
             with tqdm(total=None, desc=f'[Loacate Sample Offsets] job: {job_id}', position=job_id, disable=('DISABLE_TQDM' in os.environ)) as pbar: 
                 while infile.tell() < end: 
-                    infile.readline() 
+                    line = infile.readline() 
+                    try: 
+                        Criteo.parse_sample(line) 
+                    except ValueError as e: 
+                        offsets.pop() 
+                        print(e) 
                     offsets.append(infile.tell()) 
                     pbar.update()  
             assert offsets.pop() == end  
@@ -165,20 +169,21 @@ class Criteo(Dataset):
         with open(data_path, mode='rb') as infile:
             with tqdm(sample_offsets, desc=f'[Counting Field Features] job: {job_id}', position=job_id, disable=('DISABLE_TQDM' in os.environ)) as pbar: 
                 for offset in pbar: 
-                    infile.seek(offset) 
+                    infile.seek(offset, os.SEEK_SET) 
                     Criteo._count_one_line(infile.readline(), field_features_count) 
         return field_features_count 
 
     @classmethod 
     def _count_one_line(cls, line: bytes, field_features_count: List[typing.Counter[bytes]]) -> None: 
-        label, *values = line.rstrip(b'\n').split(b'\t') 
-        if len(values) != Criteo.NUM_FIELDS: 
-            print(f'{len(values)} != {Criteo.NUM_FIELDS}: {values}')
-            return 
-        for field_id in Criteo.FIELDS_I: 
-                field_features_count[field_id][Criteo._quantize_I_feature(values[field_id])] += 1 
-        for field_id in Criteo.FIELDS_C: 
-                field_features_count[field_id][values[field_id]] += 1    
+        try: 
+            label, fields = Criteo.parse_sample(line) 
+        except ValueError as e: 
+            print(e) 
+        else: 
+            for field_id in Criteo.FIELDS_I: 
+                    field_features_count[field_id][Criteo._quantize_I_feature(fields[field_id])] += 1 
+            for field_id in Criteo.FIELDS_C: 
+                    field_features_count[field_id][fields[field_id]] += 1    
     
     @classmethod 
     def _quantize_I_feature(cls, value: bytes) -> str: 
@@ -189,3 +194,15 @@ class Criteo(Dataset):
             return str(int(math.log(value)**2)) 
         else: 
             return str(value - 2)
+
+    @classmethod
+    def _is_valid_num_fields(cls, fields: List[bytes]) -> bool: 
+        return len(fields) == Criteo.NUM_FIELDS  
+
+    @classmethod 
+    def parse_sample(cls, line: bytes) -> Tuple[bytes, List[bytes]]: 
+        label, *fields = line.rstrip(b'\n').split(b'\t') 
+        if Criteo._is_valid_num_fields(fields):
+            return label, fields 
+        raise ValueError(f'len(fields)={len(fields)}: {fields}')
+

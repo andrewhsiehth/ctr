@@ -29,6 +29,7 @@ def parse_args():
     parser.add_argument('--world_size', type=int, default=1) 
     parser.add_argument('--rank', type=int, default=0)
     parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--checkpoint_interval', type=int, default=200)
     parser.add_argument('--n_epochs', type=int, default=3)
     parser.add_argument('--embedding_dim', type=int, default=10)
     parser.add_argument('--out_features', type=int, default=1)
@@ -121,10 +122,9 @@ if __name__ == '__main__':
                 dataloader=trainloader, 
                 optimizer=optimizer, 
                 criterion=criterion, 
-                device=args.device 
+                device=args.device,
+                args=args # this is so bad  
             ) 
-            if epoch == 0: # force save before oom
-                torch.save(model.module, os.path.join(args.checkpoint_dir, 'best.pt'))
             roc_auc, accuracy, loss = evaluate(
                 model=model, 
                 dataloader=valloader, 
@@ -132,7 +132,13 @@ if __name__ == '__main__':
                 device=args.device 
             )
             if roc_auc > best_roc_auc: 
-                torch.save(model.module, os.path.join(args.checkpoint_dir, 'best.pt'))
+                torch.save({
+                    'epoch': epoch, 
+                    'accuracy': accuracy, 
+                    'roc_auc': roc_auc, 
+                    'model': model.module.state_dict(), 
+                    'optimizer': optimizer.state_dict()
+                }, os.path.join(args.checkpoint_dir, 'best.pt'))
             best_acc = max(best_acc, accuracy) 
             best_roc_auc = max(best_roc_auc, roc_auc) 
             pbar.set_postfix(acc=f'{best_acc:.4f}', roc_auc=f'{best_roc_auc:.4f}') 

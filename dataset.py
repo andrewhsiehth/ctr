@@ -51,7 +51,7 @@ class Criteo(Dataset):
             fields[field_id] = self.feature_mapping[field_id].get(Criteo._quantize_I_feature(fields[field_id]), self.feature_default[field_id]) 
         for field_id in Criteo.FIELDS_C: 
             fields[field_id] = self.feature_mapping[field_id].get(fields[field_id], self.feature_default[field_id]) 
-        return torch.as_tensor(fields), float(label) 
+        return torch.as_tensor(fields), int(label) 
 
     @classmethod 
     def prepare_Criteo(cls, root: str, min_threshold: int=10, val_split: float=0.1, n_jobs: int=os.cpu_count()) -> Tuple[Dataset, Dataset]: 

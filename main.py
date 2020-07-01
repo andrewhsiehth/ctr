@@ -20,6 +20,7 @@ def parse_args():
     parser = ArgumentParser() 
     parser.add_argument('--dataset_root', type=str, required=True) 
     parser.add_argument('--checkpoint_dir', type=str, required=True)
+    parser.add_argument('--pretrained_path', type=str, default=None) 
     parser.add_argument('--num_workers', type=int, default=0) 
     parser.add_argument('--num_threads', type=int, default=os.cpu_count()) 
     parser.add_argument('--batch_size', type=int, default=2048) 
@@ -95,8 +96,9 @@ if __name__ == '__main__':
             out_features=args.out_features, 
             hidden_units=args.hidden_units, 
             dropout_rates=args.dropout_rates 
-        ).to(args.device) 
-    ) 
+        ).to(args.device)
+    )
+    
     # model = DistributedDataParallel(DeepFM(
     #     field_dims=dataset.field_dims, 
     #     embedding_dim=args.embedding_dim, 
@@ -106,7 +108,13 @@ if __name__ == '__main__':
     # ).to(args.device))
 
     print('[init optimizer]') 
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr) 
+    optimizer = torch.optim.Adam(model.module.parameters(), lr=args.lr) 
+
+    if args.pretrained_path: 
+        print('[load pretrained]')
+        pretrained = torch.load(args.pretrained_path, map_location=args.device) 
+        model.module.load_state_dict(pretrained['model'])
+        optimizer.load_state_dict(pretrained['optimizer'])
 
     print('[init criterion]') 
     criterion = torch.nn.BCEWithLogitsLoss() 

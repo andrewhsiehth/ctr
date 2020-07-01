@@ -5,8 +5,10 @@ from .pairwise_interaction import PairwiseInteraction
 import torch 
 from torch import nn 
 
+from typing import List 
+
 class FM(nn.Module): 
-    def __init__(self, field_dims, embedding_dim, out_features): 
+    def __init__(self, field_dims: List[int], embedding_dim: int, out_features: int): 
         super().__init__() 
         self.field_linear = FieldLinear(field_dims=field_dims, out_features=out_features) 
         self.field_embedding = FieldEmbedding(field_dims=field_dims, embedding_dim=embedding_dim) 

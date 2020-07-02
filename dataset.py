@@ -140,7 +140,8 @@ class Criteo(Dataset):
             except KeyboardInterrupt as e: 
                 raise e 
             finally: 
-                pool.terminate() # should be redundant
+                # should be redundant
+                pool.terminate() 
                 pool.join() 
 
 
@@ -158,7 +159,8 @@ class Criteo(Dataset):
             except KeyboardInterrupt as e: 
                 raise e 
             finally: 
-                pool.terminate() # should be redundant
+                # should be redundant
+                pool.terminate() 
                 pool.join()
 
 
@@ -170,12 +172,7 @@ class Criteo(Dataset):
             infile.seek(start, os.SEEK_SET) 
             with tqdm(total=None, desc=f'[Loacate Sample Offsets] job: {job_id}', position=job_id, disable=('DISABLE_TQDM' in os.environ)) as pbar: 
                 while infile.tell() < end: 
-                    line = infile.readline() 
-                    try: 
-                        Criteo.parse_sample(line) 
-                    except ValueError as e: 
-                        offsets.pop() 
-                        print(e) 
+                    infile.readline() 
                     offsets.append(infile.tell()) 
                     pbar.update()  
             assert offsets.pop() == end  
@@ -194,15 +191,11 @@ class Criteo(Dataset):
 
     @classmethod 
     def _count_one_line(cls, line: bytes, field_features_count: List[typing.Counter[bytes]]) -> None: 
-        try: 
-            label, fields = Criteo.parse_sample(line) 
-        except ValueError as e: 
-            print(e) 
-        else: 
-            for field_id in Criteo.FIELDS_I: 
-                    field_features_count[field_id][Criteo._quantize_I_feature(fields[field_id])] += 1 
-            for field_id in Criteo.FIELDS_C: 
-                    field_features_count[field_id][fields[field_id]] += 1    
+        label, fields = Criteo.parse_sample(line) 
+        for field_id in Criteo.FIELDS_I: 
+                field_features_count[field_id][Criteo._quantize_I_feature(fields[field_id])] += 1 
+        for field_id in Criteo.FIELDS_C: 
+                field_features_count[field_id][fields[field_id]] += 1     
     
     @classmethod 
     def _quantize_I_feature(cls, value: bytes) -> str: 
@@ -223,5 +216,5 @@ class Criteo(Dataset):
         label, *fields = line.rstrip(b'\n').split(b'\t') 
         if Criteo._is_valid_num_fields(fields):
             return label, fields 
-        raise ValueError(f'len(fields)={len(fields)}: {fields}')
+        raise ValueError(f'len(fields)={len(fields)}: {fields}') # no catch, assert data source is clean
 

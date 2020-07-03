@@ -1,16 +1,14 @@
-from .field_linear import FieldLinear 
-from .field_embedding import FieldEmbedding 
+from .layers import FeatureLinear 
+from .layers import FeatureEmbedding  
 
 import torch 
 from torch import nn 
 
-from typing import List 
-
 class AttentionalFM(nn.Module): 
-    def __init__(self, field_dims: List[int], embedding_dim: int, attention_dim: int, out_features: int, dropout_rate: float): 
+    def __init__(self, num_features: int, embedding_dim: int, attention_dim: int, out_features: int, dropout_rate: float): 
         super().__init__() 
-        self.field_linear = FieldLinear(field_dims=field_dims, out_features=out_features) 
-        self.field_embedding = FieldEmbedding(field_dims=field_dims, embedding_dim=embedding_dim) 
+        self.feature_linear = FeatureLinear(num_features=num_features, out_features=out_features) 
+        self.feature_embedding = FeatureEmbedding(num_features=num_features, embedding_dim=embedding_dim) 
         self.attenional_interaction = AttentionalInteraction(
             embedding_dim=embedding_dim, 
             attention_dim=attention_dim, 
@@ -18,11 +16,14 @@ class AttentionalFM(nn.Module):
             dropout_rate=dropout_rate 
         )
 
-    def forward(self, x): 
+    def forward(self, feature_idx, feature_value): 
         """
-        :param x: (batch_size, num_fields) 
+        :param feature_idx: (batch_size, num_fields) 
+        :param feature_value: (batch_size, num_fields) 
+
+        :return : (batch_size, out_features)
         """
-        return self.field_linear(x) + self.attenional_interaction(self.field_embedding(x)) 
+        return self.feature_linear(feature_idx, feature_value) + self.attenional_interaction(self.feature_embedding(feature_idx, feature_value)) 
 
 class AttentionalInteraction(nn.Module): 
     def __init__(self, embedding_dim: int, attention_dim: int, out_features: int, dropout_rate: float): 
@@ -40,6 +41,8 @@ class AttentionalInteraction(nn.Module):
     def forward(self, x): 
         """
         :param x: (batch_size, num_fields, embedding_dim)
+
+        :return : (batch_size, out_features)
         """
         x = self.pairwise_product(x) # (batch_size, num_fields * (num_fields - 1) / 2, embedding_dim)
         score = self.attention_score(x) # (batch_size, num_fields * (num_fields - 1) / 2, 1)
@@ -51,6 +54,11 @@ class PairwiseProduct(nn.Module):
         super().__init__() 
     
     def forward(self, x): 
+        """
+        :param x: (batch_size, num_fields, embedding_dim) 
+
+        :return : (batch_size, num_fields * (num_fields - 1) / 2, embedding_dim)
+        """
         batch_size, num_fields, embedding_dim = x.size() 
         all_pairs_product = x.unsqueeze(dim=1) * x.unsqueeze(dim=2) # (batch_size, num_fields, num_fields, embedding_dim) 
         idx_row, idx_col = torch.unbind(torch.triu_indices(num_fields, num_fields, offset=1), dim=0) 

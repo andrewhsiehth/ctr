@@ -1,13 +1,15 @@
 channels:
   - pytorch
+  - pytorch-nightly 
   - conda-forge
   - anaconda 
   - defaults
 dependencies:
   - conda-pack 
   - python=3.7
-  - cudatoolkit>=10.0 
+# - cudatoolkit>=10.0 
   - pytorch>=1.5.0
+  - ignite
   - torchvision>=0.5.0
   - tensorboard   
   - scikit-learn 

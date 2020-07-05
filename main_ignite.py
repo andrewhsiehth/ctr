@@ -18,6 +18,7 @@ def parse_args():
     parser.add_argument('--data_uri_train', type=str, required=True) 
     parser.add_argument('--data_uri_val', type=str, default=None) 
     parser.add_argument('--data_uri_test', type=str, default=None) 
+    parser.add_argument('--checkpoint_dir', type=str, required=True) 
     parser.add_argument('--device', type=torch.device, default=torch.device('cpu')) 
     parser.add_argument('--batch_size', type=int, default=2048) 
     parser.add_argument('--num_workers', type=int, default=0)

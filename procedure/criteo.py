@@ -4,6 +4,9 @@ from ignite.metrics import Accuracy
 from ignite.metrics import Loss 
 from ignite.contrib.metrics import ROC_AUC 
 from ignite.contrib.handlers.tqdm_logger import ProgressBar 
+from ignite.handlers import Checkpoint 
+from ignite.handlers import DiskSaver 
+from ignite.handlers import global_step_from_engine 
 
 import torch 
 from torch.utils.data import DataLoader 
@@ -78,6 +81,30 @@ def set_handlers(trainer: Engine, evaluator: Engine, valloader: DataLoader, mode
     def _evaluate(trainer: Engine): 
         evaluator.run(valloader, max_epochs=1) 
     
+    evaluator.add_event_handler(
+        event_name=Events.EPOCH_COMPLETED, 
+        handler=Checkpoint(
+            to_save={
+                'model': model, 
+                'optimizer': optimizer, 
+                'trainer': trainer
+            }, 
+            save_handler=DiskSaver(
+                dirname=args.checkpoint_dir, 
+                atomic=True, 
+                create_dir=True, 
+                require_empty=False
+            ), 
+            filename_prefix='best', 
+            score_function=lambda engine: engine.state.metrics['roc_auc'], 
+            score_name='val_roc_auc', 
+            n_saved=1,
+            global_step_transform=global_step_from_engine(trainer) 
+        )
+    ) 
+
+    
+
 
 
 

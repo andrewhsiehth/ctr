@@ -3,7 +3,7 @@ channels:
   - pytorch-nightly 
   - conda-forge
   - anaconda 
-  - defaults
+  - main
 dependencies:
   - conda-pack 
   - python=3.7

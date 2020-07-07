@@ -69,7 +69,7 @@ if __name__ == '__main__':
         out_features=args.out_features, 
         hidden_units=args.hidden_units, 
         dropout_rates=args.dropout_rates  
-    )
+    ).to(args.device)
 
     print('[init optimizer]') 
     optimizer = optim.Adam(model.parameters(), lr=args.lr) 

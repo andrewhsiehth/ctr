@@ -105,7 +105,7 @@ if __name__ == '__main__':
         print('[load pretrained checkpoint]') 
         ckpt = torch.load(args.pretrained_path, map_location=args.device) 
         model.load_state_dict(ckpt['model']) 
-        optimizer.load_state_dict(ckpt['model']) 
+        optimizer.load_state_dict(ckpt['optimizer']) 
         trainer.load_state_dict(ckpt['trainer']) 
 
     print('[start training]') 

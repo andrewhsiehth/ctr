@@ -22,6 +22,21 @@ def file_info(uri: str) -> fs.FileInfo:
     info, = filesystem.get_file_info([path]) 
     return info 
     
+def open_buffered_stream_writer(uri: str, buffer_size: int = io.DEFAULT_BUFFER_SIZE) -> io.BufferedWriter: 
+    try: 
+        output_stream = open_output_stream(uri) 
+        return io.BufferedWriter(output_stream, buffer_size=buffer_size) 
+    except Exception as e:  
+        output_stream.close() 
+        raise e  
+
+def open_output_stream(uri: str) -> NativeFile: 
+    filesystem, path = fs.FileSystem.from_uri(uri) 
+    return filesystem.open_output_stream(path) 
+
+def write_file(buffer: io.BytesIO, uri: str, buffer_size: int = io.DEFAULT_BUFFER_SIZE) -> None: 
+    with open_buffered_stream_writer(uri, buffer_size=buffer_size) as output_stream: 
+        output_stream.write(buffer.getbuffer()) 
 
 
 

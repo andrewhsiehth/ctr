@@ -19,6 +19,7 @@ def parse_args():
     parser.add_argument('--data_uri_val', type=str, default=None) 
     parser.add_argument('--data_uri_test', type=str, default=None) 
     parser.add_argument('--checkpoint_dir', type=str, required=True) 
+    parser.add_argument('--pretrained_path', type=str, default=None) 
     parser.add_argument('--device', type=torch.device, default=torch.device('cpu')) 
     parser.add_argument('--batch_size', type=int, default=2048) 
     parser.add_argument('--num_workers', type=int, default=0)
@@ -100,6 +101,12 @@ if __name__ == '__main__':
         args=args 
     )
 
+    if args.pretrained_path: 
+        print('[load pretrained checkpoint]') 
+        ckpt = torch.load(args.pretrained_path, map_location=args.device) 
+        model.load_state_dict(ckpt['model']) 
+        optimizer.load_state_dict(ckpt['model']) 
+        trainer.load_state_dict(ckpt['trainer']) 
 
     print('[start training]') 
     trainer.run(trainloader, max_epochs=args.max_epochs) 
